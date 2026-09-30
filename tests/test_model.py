@@ -166,5 +166,27 @@ class LoadingWhileEventsArrive(unittest.TestCase):
         self.assertNotIn("light.a", store.states)
 
 
+class WalkingWhileEventsArrive(unittest.TestCase):
+    """The window walks the states while the reader thread files changes."""
+
+    def test_a_room_can_be_listed_while_an_entity_appears(self):
+        store = support.build(
+            entities=[support.entity("light.a", area_id="kueche"),
+                      support.entity("light.b", area_id="kueche")],
+            states=[support.state("light.a", "on"), support.state("light.b", "on")],
+            areas=support.AREAS)
+        area_of = store.area_of
+
+        def arriving(entity_id):
+            # What the reader thread may do between two steps of the walk.
+            store._on_state_changed({"data": {
+                "entity_id": "light.neu", "new_state": support.state("light.neu", "on")}})
+            return area_of(entity_id)
+
+        store.area_of = arriving
+        self.assertEqual(sorted(store.entities_in_area("kueche")),
+                         ["light.a", "light.b"])
+
+
 if __name__ == "__main__":
     unittest.main()

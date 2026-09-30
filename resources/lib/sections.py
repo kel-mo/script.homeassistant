@@ -173,7 +173,7 @@ def _summary_entities(store, key):
     if not domains and not classes and not matches:
         return []
 
-    for entity_id, state in store.states.items():
+    for entity_id, state in store.states_snapshot().items():
         if not store.is_visible(entity_id):
             continue
         if state.domain in domains:
@@ -202,7 +202,7 @@ def _room_climate_sensors(store):
 
 def _maintenance_entities(store):
     matches = []
-    for entity_id, state in store.states.items():
+    for entity_id, state in store.states_snapshot().items():
         if not store.is_visible(entity_id, include_diagnostic=True):
             continue
         if state.domain == "update":

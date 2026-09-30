@@ -122,6 +122,21 @@ class Summaries(unittest.TestCase):
     def test_a_configured_summary_survives_being_empty(self):
         self.assertEqual(self.summary("weather").entity_ids, [])
 
+    def test_a_summary_can_be_built_while_an_entity_appears(self):
+        store = house(home={"shortcuts": [{"type": "summary", "key": "light"}]})
+        is_visible = store.is_visible
+
+        def arriving(entity_id, include_diagnostic=False):
+            # What the reader thread may do between two steps of the walk.
+            store._on_state_changed({"data": {
+                "entity_id": "light.neu", "new_state": support.state("light.neu", "on")}})
+            return is_visible(entity_id, include_diagnostic)
+
+        store.is_visible = arriving
+        light = next(s for s in sections.build(store, translate=support.untranslated)
+                     if s.key == "light")
+        self.assertEqual(light.entity_ids, ["light.decke"])
+
     def test_hidden_shortcuts_are_skipped(self):
         store = house(home={"shortcuts": [
             {"type": "summary", "key": "light", "hidden": True}]})

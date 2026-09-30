@@ -232,6 +232,15 @@ class Store:
 
     # -- lookups ---------------------------------------------------------
 
+    def states_snapshot(self):
+        """A copy of the states, taken under the lock.
+
+        The reader thread files state changes into the live dictionary, so
+        anything walking it from another thread walks a copy instead.
+        """
+        with self._lock:
+            return dict(self.states)
+
     @property
     def unit_of_temperature(self):
         return (self.config.get("unit_system") or {}).get("temperature", "\u00b0C")
@@ -315,7 +324,7 @@ class Store:
 
     def entities_in_area(self, area_id):
         result = []
-        for entity_id in self.states:
+        for entity_id in self.states_snapshot():
             if self.area_of(entity_id) == area_id and self.is_visible(entity_id):
                 result.append(entity_id)
         return result
