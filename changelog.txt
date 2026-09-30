@@ -1,3 +1,15 @@
+v1.5.0.1
+- Fixed: the dashboard could crash while states were changing
+- Fixed: camera stills stopped after half an hour with a user name and password
+- Fixed: the access token was sent to image servers other than Home Assistant
+- Fixed: a cancelled login or a rejected token left the dashboard reconnecting forever
+- Fixed: a network blip could force a new login, second factor and all
+- Fixed: a change made while connecting could be missed
+- Fixed: an IPv6 address in the Home Assistant URL
+- Temperatures and numbers take decimals where the entity steps in them; a thermostat holding a range asks for both ends
+- Summaries follow Home Assistant: the default ones appear even if the shortcut list was never edited, and empty ones are left out
+- The access token is hidden in the settings
+
 v1.5.0
 - Switching a device off now asks first - two settings decide whether it asks at all, and whether lights are spared
 - Opening a door now asks first, under a setting of its own
