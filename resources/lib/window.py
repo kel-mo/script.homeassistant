@@ -650,17 +650,34 @@ class Dashboard(xbmcgui.WindowXML):
         if action.kind == ha_actions.NUMBER:
             field = _NUMBER_FIELDS.get(action.service)
             if field:
-                key, current = field[0], attributes.get(field[1], 0)
+                key, current, step = field[0], attributes.get(field[1], 0), 1
             else:
                 key, current = "value", state.state if state else "0"
-            value = dialog.numeric(0, kodi.tr(action.label_key), str(_as_int(current)))
-            return None if value in (None, "") else {key: float(value)}
+                step = attributes.get("step", 1)
+            value = _ask_number(dialog, kodi.tr(action.label_key), current, step)
+            return None if value is None else {key: value}
 
         if action.kind == ha_actions.TEMPERATURE:
-            current = attributes.get("temperature", attributes.get("current_temperature", 20))
-            value = dialog.numeric(0, kodi.tr("action_set_temperature"),
-                                   str(_as_int(current)))
-            return None if value in (None, "") else {"temperature": float(value)}
+            # Home Assistant's own dialog steps by half a degree, or by one
+            # where the unit is Fahrenheit.
+            step = attributes.get("target_temp_step") or (
+                1 if self._store.unit_of_temperature == "\u00b0F" else 0.5)
+            fields = [("temperature", "action_set_temperature")]
+            if (action.domain == "climate" and attributes.get("temperature") is None
+                    and attributes.get("target_temp_low") is not None):
+                # A range to be held, as in heat_cool.
+                fields = [("target_temp_low", "temperature_low"),
+                          ("target_temp_high", "temperature_high")]
+            data = {}
+            for key, label in fields:
+                current = attributes.get(key)
+                if current is None:
+                    current = attributes.get("current_temperature")
+                value = _ask_number(dialog, kodi.tr(label), current, step)
+                if value is None:
+                    return None
+                data[key] = value
+            return data
 
         if action.kind == ha_actions.PICK:
             labels, values = _choices(self._store, entity_id, action,
@@ -883,8 +900,27 @@ def _choices(store, entity_id, action, attributes):
             named)
 
 
-def _as_int(value):
+def _ask_number(dialog, heading, current, step):
+    """A number from the user, to the step's precision, or None.
+
+    Kodi's number pad has no decimal point, so a step below one is typed on
+    the keyboard instead.
+    """
     try:
-        return int(float(value))
+        step = float(step) or 1.0
     except (TypeError, ValueError):
-        return 0
+        step = 1.0
+    text = ("%.6f" % step).rstrip("0")
+    places = len(text) - text.index(".") - 1
+    try:
+        prefill = "%.*f" % (places, float(current))
+    except (TypeError, ValueError):
+        prefill = ""
+    if places:
+        value = dialog.input(heading, prefill, type=xbmcgui.INPUT_ALPHANUM)
+    else:
+        value = dialog.numeric(0, heading, prefill)
+    try:
+        return round(float(value.replace(",", ".")), places)
+    except (AttributeError, ValueError):
+        return None

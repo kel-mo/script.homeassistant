@@ -480,6 +480,14 @@ msgctxt "#30381"
 msgid "Play/Pause"
 msgstr "Wiedergabe/Pause"
 
+msgctxt "#30382"
+msgid "Lower target temperature"
+msgstr "Untere Zieltemperatur"
+
+msgctxt "#30383"
+msgid "Upper target temperature"
+msgstr "Obere Zieltemperatur"
+
 msgctxt "#30400"
 msgid "No Home Assistant address configured"
 msgstr "Keine Adresse von Home Assistant eingetragen"

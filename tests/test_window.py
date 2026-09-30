@@ -1,9 +1,11 @@
 """The dashboard window, as far as it can be driven without Kodi."""
 
 import unittest
+from unittest import mock
 
 from . import fakekodi  # noqa: F401  (stands in for Kodi's modules)
-from resources.lib import window
+from . import support
+from resources.lib import actions, model, window
 
 
 class Settings:
@@ -103,6 +105,55 @@ class CameraStills(unittest.TestCase):
             board._take_camera_stills()
             board._camera_worker.join(5)
         self.assertEqual(board._snapshots.tokens, ["token-2", "token-3"])
+
+
+class EnteringNumbers(unittest.TestCase):
+    """What a number dialog is opened with, and what comes back of it."""
+
+    def ask(self, action, answers, **attributes):
+        board = dashboard()
+        board._store.states = {"x.y": model.State(support.state("x.y", "5", **attributes))}
+        with mock.patch.object(window.xbmcgui, "Dialog") as dialog:
+            dialog.return_value.input.side_effect = answers
+            dialog.return_value.numeric.side_effect = answers
+            data = board._collect_input("x.y", action)
+        self.asked = [call.args[1] for call in dialog.return_value.input.call_args_list]
+        self.padded = [call.args[2] for call in dialog.return_value.numeric.call_args_list]
+        return data
+
+    def temperature(self, answers, **attributes):
+        return self.ask(actions.Action("action_set_temperature", actions.TEMPERATURE,
+                                       "climate", "set_temperature"), answers, **attributes)
+
+    def test_a_thermostat_takes_half_degrees(self):
+        self.assertEqual(self.temperature(["22.5"], temperature=21.5), {"temperature": 22.5})
+        self.assertEqual(self.asked, ["21.5"])
+
+    def test_its_own_step_wins(self):
+        self.assertEqual(self.temperature(["22"], temperature=21, target_temp_step=1),
+                         {"temperature": 22.0})
+        self.assertEqual(self.padded, ["21"])
+
+    def test_a_range_is_asked_for_end_by_end(self):
+        data = self.temperature(["19.5", "23,5"], hvac_mode="heat_cool", temperature=None,
+                                target_temp_low=19, target_temp_high=24)
+        self.assertEqual(data, {"target_temp_low": 19.5, "target_temp_high": 23.5})
+        self.assertEqual(self.asked, ["19.0", "24.0"])
+
+    def test_nothing_known_is_not_offered_as_zero(self):
+        self.temperature([""], temperature=None)
+        self.assertEqual(self.asked + self.padded, [""])
+
+    def test_a_number_keeps_the_places_of_its_step(self):
+        action = actions.Action("action_set_value", actions.NUMBER, "number", "set_value")
+        self.assertEqual(self.ask(action, ["0.75"], step=0.25), {"value": 0.75})
+        self.assertEqual(self.asked, ["5.00"])
+
+    def test_a_position_stays_on_the_number_pad(self):
+        action = actions.Action("action_position", actions.NUMBER, "cover",
+                                "set_cover_position")
+        self.assertEqual(self.ask(action, ["55"], current_position=40), {"position": 55.0})
+        self.assertEqual(self.padded, ["40"])
 
 
 if __name__ == "__main__":
