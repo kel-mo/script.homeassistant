@@ -5,6 +5,10 @@ import unittest
 from . import support
 from resources.lib import sections
 
+# The frontend's DEFAULT_SUMMARY_KEYS, in its order.
+DEFAULTS = ("light", "climate", "security", "media_players", "maintenance",
+            "weather", "energy")
+
 
 def house(extra_entities=(), extra_states=(), home=None, energy=None):
     entities = [
@@ -113,11 +117,29 @@ class Summaries(unittest.TestCase):
         self.assertEqual(players.entity_ids, ["media_player.tv"])
         self.assertEqual(players.title, "media_players")
 
+    def keys(self, shortcuts):
+        store = house(home={} if shortcuts is None else {"shortcuts": shortcuts})
+        return [s.key for s in sections.build(store, translate=support.untranslated)
+                if s.kind == sections.SUMMARY]
+
     def test_a_shortcut_that_is_not_a_summary_is_passed_over(self):
-        store = house(home={"shortcuts": [{"type": "entity",
-                                           "entity_id": "light.decke"}]})
-        self.assertEqual([s.key for s in sections.build(store, translate=support.untranslated)
-                          if s.kind == sections.SUMMARY], [])
+        self.assertEqual(self.keys([{"type": "entity", "entity_id": "light.decke"}]),
+                         list(DEFAULTS))
+
+    def test_nothing_saved_is_every_summary_in_home_assistants_order(self):
+        self.assertEqual(self.keys(None), list(DEFAULTS))
+
+    def test_the_saved_order_leads_and_the_rest_follow(self):
+        self.assertEqual(self.keys([{"type": "summary", "key": "energy"},
+                                    {"type": "summary", "key": "light"}]),
+                         ["energy", "light", "climate", "security", "media_players",
+                          "maintenance", "weather"])
+
+    def test_unknown_and_repeated_summaries_drop_out(self):
+        self.assertEqual(self.keys([{"type": "summary", "key": "light"},
+                                    {"type": "summary", "key": "alerts"},
+                                    {"type": "summary", "key": "light"}]),
+                         list(DEFAULTS))
 
     def test_a_configured_summary_survives_being_empty(self):
         self.assertEqual(self.summary("weather").entity_ids, [])
@@ -138,10 +160,8 @@ class Summaries(unittest.TestCase):
         self.assertEqual(light.entity_ids, ["light.decke"])
 
     def test_hidden_shortcuts_are_skipped(self):
-        store = house(home={"shortcuts": [
-            {"type": "summary", "key": "light", "hidden": True}]})
-        self.assertEqual([s.key for s in sections.build(store, translate=support.untranslated)
-                          if s.kind == sections.SUMMARY], [])
+        self.assertEqual(self.keys([{"type": "summary", "key": "light", "hidden": True}]),
+                         list(DEFAULTS[1:]))
 
 
 class Favourites(unittest.TestCase):

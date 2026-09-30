@@ -36,6 +36,11 @@ _SUMMARY_CLASSES = {
     },
 }
 
+# The summaries Home Assistant offers whether saved or not, in its order: the
+# frontend's DEFAULT_SUMMARY_KEYS, in src/data/home_shortcuts.ts.
+_DEFAULT_SUMMARIES = ("light", "climate", "security", "media_players",
+                      "maintenance", "weather", "energy")
+
 # What Home Assistant's maintenance view holds: the battery of every device
 # that runs on one, at any level, plus anything with an update waiting. Not a
 # list of faults - problem sensors and unavailable entities stay out.
@@ -98,7 +103,7 @@ def build(store, options=None, translate=None):
                                     label("favourites"), favourites))
 
     if options.summaries:
-        for shortcut in store.home.get("shortcuts") or []:
+        for shortcut in _resolved_shortcuts(store.home.get("shortcuts")):
             # Summaries only. Home Assistant lets a shortcut be added by hand
             # as well; what such an entry looks like has not been examined, so
             # it is passed over rather than guessed at.
@@ -114,6 +119,27 @@ def build(store, options=None, translate=None):
         sections.extend(_area_sections(store, options, label))
 
     return sections
+
+
+def _resolved_shortcuts(saved):
+    """The shortcuts the way Home Assistant's frontend reads the saved list.
+
+    Nothing is saved until the list is first edited, and a summary missing
+    from it is still shown: those are added at the end, in the default order.
+    A summary that is no longer one of the defaults is dropped, and one listed
+    twice counts once. This is resolveShortcutItems in the frontend.
+    """
+    resolved, seen = [], set()
+    for shortcut in saved or []:
+        if shortcut.get("type") == "summary":
+            key = shortcut.get("key")
+            if key not in _DEFAULT_SUMMARIES or key in seen:
+                continue
+            seen.add(key)
+        resolved.append(shortcut)
+    resolved.extend({"type": "summary", "key": key}
+                    for key in _DEFAULT_SUMMARIES if key not in seen)
+    return resolved
 
 
 def _by_room(store, key, kind, title, entity_ids, label):
