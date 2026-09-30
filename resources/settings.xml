@@ -46,6 +46,7 @@
                     </constraints>
                     <control type="edit" format="string">
                         <heading>30023</heading>
+                        <hidden>true</hidden>
                     </control>
                 </setting>
                 <setting id="test" type="action" label="30025">
