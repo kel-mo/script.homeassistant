@@ -1,6 +1,7 @@
 """Everything that talks to Kodi: settings, localisation, logging, dialogs."""
 
 import os
+from urllib.parse import urlparse
 
 import xbmc
 import xbmcaddon
@@ -108,6 +109,17 @@ def image_url(base_url, path, token):
         url = path
     else:
         url = base_url.rstrip("/") + path
-    if token and "/api/" in url:
+    if token and "/api/" in url and _origin(url) == _origin(base_url):
         return "%s|Authorization=Bearer %s" % (url, token)
     return url
+
+
+def _origin(url):
+    """Scheme, host and port: the token goes to Home Assistant and nowhere else."""
+    parsed = urlparse(url)
+    try:
+        port = parsed.port
+    except ValueError:  # a port out of range matches nothing
+        return url
+    default = {"http": 80, "https": 443}.get(parsed.scheme)
+    return parsed.scheme, (parsed.hostname or "").lower(), port or default
