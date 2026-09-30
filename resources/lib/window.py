@@ -330,12 +330,18 @@ class Dashboard(xbmcgui.WindowXML):
             return
 
         self._camera_worker = threading.Thread(
-            target=self._fetch_stills, args=(entity_ids, self._image_token),
-            name="ha-cameras")
+            target=self._fetch_stills, args=(entity_ids,), name="ha-cameras")
         self._camera_worker.daemon = True
         self._camera_worker.start()
 
-    def _fetch_stills(self, entity_ids, token):
+    def _fetch_stills(self, entity_ids):
+        # Asked for every round: a token from a login lasts half an hour.
+        try:
+            token = self._auth.access_token()
+        except Exception as error:
+            kodi.log("no token for the camera stills: %s" % error, 2)
+            return
+        self._image_token = token
         for entity_id in entity_ids:
             if self.closed:
                 return

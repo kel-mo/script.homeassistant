@@ -13,6 +13,7 @@ the same code path, provided the caller supplies a ``prompt`` callback.
 
 import json
 import ssl
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -91,6 +92,8 @@ class Authenticator:
         self._access_token = ""
         self._refresh_token = ""
         self._expires_at = 0.0
+        # The session and the camera stills both ask, each on its own thread.
+        self._lock = threading.Lock()
 
     @property
     def uses_long_lived_token(self):
@@ -99,16 +102,17 @@ class Authenticator:
     def access_token(self):
         if self._token:
             return self._token
-        if self._access_token and time.time() < self._expires_at - _EXPIRY_MARGIN:
-            return self._access_token
-        if self._refresh_token:
-            try:
-                return self._refresh()
-            except TransportError:
-                raise
-            except AuthError:
-                self._refresh_token = ""
-        return self._login()
+        with self._lock:
+            if self._access_token and time.time() < self._expires_at - _EXPIRY_MARGIN:
+                return self._access_token
+            if self._refresh_token:
+                try:
+                    return self._refresh()
+                except TransportError:
+                    raise
+                except AuthError:
+                    self._refresh_token = ""
+            return self._login()
 
     def invalidate(self):
         """Drop the cached access token so the next call authenticates again."""

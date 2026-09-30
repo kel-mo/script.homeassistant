@@ -2,6 +2,7 @@
 
 import io
 import json
+import threading
 import unittest
 import urllib.error
 from unittest import mock
@@ -69,6 +70,34 @@ class Refreshing(unittest.TestCase):
                          {"access_token": "fresh", "expires_in": 1800}):
             self.assertRaises(ha_auth.AuthError, self.auth.access_token)
             self.assertEqual(self.auth.access_token(), "fresh")
+
+
+class TwoAskers(unittest.TestCase):
+    """The session and the camera stills may both find the token expiring."""
+
+    def test_only_one_of_them_renews_it(self):
+        auth = ha_auth.Authenticator("http://ha.invalid", username="kodi",
+                                     password="secret")
+        auth._refresh_token = "refresh"
+        renewing, release, renewals = threading.Event(), threading.Event(), []
+
+        def refresh():
+            renewals.append(1)
+            renewing.set()
+            release.wait(5)
+            return auth._store({"access_token": "fresh", "expires_in": 1800})
+
+        auth._refresh = refresh
+        first = threading.Thread(target=auth.access_token)
+        first.start()
+        renewing.wait(5)
+        second = threading.Thread(target=auth.access_token)
+        second.start()
+        second.join(0.2)  # long enough to reach the refresh, were it free
+        release.set()
+        first.join(5)
+        second.join(5)
+        self.assertEqual(len(renewals), 1)
 
 
 if __name__ == "__main__":

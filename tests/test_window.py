@@ -69,5 +69,41 @@ class Connecting(unittest.TestCase):
         self.assertEqual(board._store.states["light.a"].state, "on")
 
 
+class Tokens:
+    """Stands in for the authenticator: a new token every time it is asked."""
+
+    def __init__(self):
+        self.handed_out = 0
+
+    def access_token(self):
+        self.handed_out += 1
+        return "token-%d" % self.handed_out
+
+
+class Recorder:
+    """Stands in for the snapshots: remembers the token each still went with."""
+
+    def __init__(self):
+        self.tokens = []
+
+    def fetch(self, entity_id, token):
+        self.tokens.append(token)
+        return ""
+
+
+class CameraStills(unittest.TestCase):
+    def test_every_round_asks_for_the_token_as_it_is_now(self):
+        board = dashboard()
+        board._auth = Tokens()
+        board._image_token = board._auth.access_token()  # as at connect
+        board._snapshots = Recorder()
+        board._row_positions = {"camera.tuer": 0}
+        for _ in range(2):
+            board._camera_due = 0.0
+            board._take_camera_stills()
+            board._camera_worker.join(5)
+        self.assertEqual(board._snapshots.tokens, ["token-2", "token-3"])
+
+
 if __name__ == "__main__":
     unittest.main()
