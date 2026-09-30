@@ -110,10 +110,11 @@ def build(store, options=None, translate=None):
             if shortcut.get("type") != "summary" or shortcut.get("hidden"):
                 continue
             key = shortcut.get("key", "")
-            # Shown even when empty: the shortcut is configured in Home
-            # Assistant, and "nothing needs attention" is worth seeing.
+            entity_ids = _summary_entities(store, key)
+            if not _summary_shown(store, key, entity_ids):
+                continue
             sections.append(_by_room(store, key, SUMMARY, label(key),
-                                     _summary_entities(store, key), label))
+                                     entity_ids, label))
 
     if options.areas:
         sections.extend(_area_sections(store, options, label))
@@ -140,6 +141,25 @@ def _resolved_shortcuts(saved):
     resolved.extend({"type": "summary", "key": key}
                     for key in _DEFAULT_SUMMARIES if key not in seen)
     return resolved
+
+
+def _summary_shown(store, key, entity_ids):
+    """Whether Home Assistant's Home dashboard shows this summary at all.
+
+    It leaves out a summary with nothing to show, and the frontend's
+    home-overview-view-strategy.ts decides what that means: weather needs a
+    weather entity - the sun does not count - energy needs a grid source
+    drawn from, and maintenance needs a battery.
+    """
+    if key == "weather":
+        return any(entity_id.startswith("weather.") for entity_id in entity_ids)
+    if key == "energy":
+        return any(source.get("type") == "grid" and source.get("stat_energy_from")
+                   for source in store.energy.get("energy_sources") or [])
+    if key == "maintenance":
+        return any(store.device_class_of(entity_id) == "battery"
+                   for entity_id in entity_ids)
+    return bool(entity_ids)
 
 
 def _by_room(store, key, kind, title, entity_ids, label):

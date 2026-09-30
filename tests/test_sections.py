@@ -117,8 +117,19 @@ class Summaries(unittest.TestCase):
         self.assertEqual(players.entity_ids, ["media_player.tv"])
         self.assertEqual(players.title, "media_players")
 
-    def keys(self, shortcuts):
-        store = house(home={} if shortcuts is None else {"shortcuts": shortcuts})
+    def keys(self, shortcuts, **kwargs):
+        """The summaries shown, in a house that has something for every one."""
+        kwargs.setdefault("extra_entities", [
+            support.entity("media_player.tv", "Fernseher", area_id="kueche"),
+            support.entity("weather.home", "Wetter")])
+        kwargs.setdefault("extra_states", [
+            support.state("media_player.tv", "playing"),
+            support.state("weather.home", "sunny"),
+            support.state("sensor.netz", "1024")])
+        kwargs.setdefault("energy", {"energy_sources": [
+            {"type": "grid", "stat_energy_from": "sensor.netz"}]})
+        store = house(home={} if shortcuts is None else {"shortcuts": shortcuts},
+                      **kwargs)
         return [s.key for s in sections.build(store, translate=support.untranslated)
                 if s.kind == sections.SUMMARY]
 
@@ -141,8 +152,26 @@ class Summaries(unittest.TestCase):
                                     {"type": "summary", "key": "light"}]),
                          list(DEFAULTS))
 
-    def test_a_configured_summary_survives_being_empty(self):
-        self.assertEqual(self.summary("weather").entity_ids, [])
+    def test_a_summary_with_nothing_to_show_is_left_out(self):
+        self.assertNotIn("media_players", self.keys(None, extra_entities=[],
+                                                    extra_states=[]))
+
+    def test_the_sun_alone_makes_no_weather(self):
+        self.assertNotIn("weather", self.keys(
+            None, extra_entities=[support.entity("sun.sun", "Sonne")],
+            extra_states=[support.state("sun.sun", "above_horizon")]))
+
+    def test_energy_needs_the_grid_to_be_drawn_from(self):
+        solar = {"energy_sources": [{"type": "solar", "stat_energy_from": "sensor.netz"}]}
+        self.assertNotIn("energy", self.keys(None, energy=solar))
+        self.assertIn("energy", self.keys(None))
+
+    def test_maintenance_needs_a_battery_not_just_an_update(self):
+        store = support.build(
+            entities=[support.entity("update.router", "Router")],
+            states=[support.state("update.router", "on")])
+        self.assertEqual([s.key for s in sections.build(store, translate=support.untranslated)
+                          if s.kind == sections.SUMMARY], [])
 
     def test_a_summary_can_be_built_while_an_entity_appears(self):
         store = house(home={"shortcuts": [{"type": "summary", "key": "light"}]})
