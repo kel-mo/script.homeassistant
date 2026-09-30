@@ -268,8 +268,9 @@ class Dashboard(xbmcgui.WindowXML):
 
     def _on_ready(self, client):
         try:
-            self._store.load(client)
+            # Subscribed first, so a change during the load is not missed.
             self._store.subscribe(client)
+            self._store.load(client)
         except Exception as error:
             self._note(status=kodi.tr("disconnected"), message=str(error))
             raise
