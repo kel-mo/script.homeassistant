@@ -130,7 +130,9 @@ class HomeAssistant:
         message = dict(payload)
         message["type"] = type_
         message_id = self._send(message)
-        pending = self._pending[message_id]
+        pending = self._pending.get(message_id)
+        if pending is None:  # closed while sending
+            raise NotConnected("connection closed")
         try:
             if not pending.event.wait(_COMMAND_TIMEOUT):
                 raise HomeAssistantError("timeout waiting for '%s'" % type_)
@@ -145,7 +147,9 @@ class HomeAssistant:
         message = dict(payload)
         message["type"] = type_
         message_id = self._send(message, subscription=callback)
-        pending = self._pending[message_id]
+        pending = self._pending.get(message_id)
+        if pending is None:  # closed while sending
+            raise NotConnected("connection closed")
         try:
             if not pending.event.wait(_COMMAND_TIMEOUT):
                 raise HomeAssistantError("timeout waiting for subscription")

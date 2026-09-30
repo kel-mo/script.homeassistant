@@ -138,6 +138,24 @@ class Handshaking(unittest.TestCase):
         self.assertTrue(FakeWebSocket.made[0].closed)
 
 
+class ClosingMidCommand(unittest.TestCase):
+    """close() runs on another thread, and may land between send and wait."""
+
+    def client(self):
+        FakeWebSocket.replies = ()
+        client = ha_client.HomeAssistant("http://ha.invalid", FakeAuth())
+        client._ws = FakeWebSocket()
+        client._ws.on_send = client.close
+        return client
+
+    def test_a_command_says_the_connection_is_gone(self):
+        self.assertRaises(ha_client.NotConnected, self.client().command, "ping")
+
+    def test_so_does_a_subscription(self):
+        self.assertRaises(ha_client.NotConnected, self.client().subscribe,
+                          lambda event: None)
+
+
 class Urls(unittest.TestCase):
     def test_the_websocket_url_follows_the_scheme(self):
         self.assertEqual(ha_client.websocket_url("https://ha.invalid"),
