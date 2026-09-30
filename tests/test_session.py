@@ -66,6 +66,78 @@ class Connecting(unittest.TestCase):
         self.assertEqual(len(FakeClient.made), 1)
 
 
+class FakeWebSocket:
+    """Stands in for the WebSocket: canned replies, or a failure instead."""
+
+    made = []
+
+    def __init__(self, *args, **kwargs):
+        self.replies = list(FakeWebSocket.replies)
+        self.sent = []
+        self.closed = False
+        self.connected = True
+        self.on_send = None
+        FakeWebSocket.made.append(self)
+
+    def connect(self):
+        pass
+
+    def recv_json(self):
+        if not self.replies:
+            raise ha_client.WebSocketClosed(reason="gone")
+        return self.replies.pop(0)
+
+    def send_json(self, message):
+        self.sent.append(message)
+        if self.on_send is not None:
+            self.on_send()
+
+    def settimeout(self, timeout):
+        pass
+
+    def close(self):
+        self.closed = True
+        self.connected = False
+
+
+class FakeAuth:
+    def access_token(self):
+        return "token"
+
+    def invalidate(self):
+        pass
+
+
+class Handshaking(unittest.TestCase):
+    def setUp(self):
+        FakeWebSocket.made = []
+        self.original = ha_client.WebSocket
+        ha_client.WebSocket = FakeWebSocket
+
+    def tearDown(self):
+        ha_client.WebSocket = self.original
+
+    def connect(self, *replies):
+        FakeWebSocket.replies = replies
+        client = ha_client.HomeAssistant("http://ha.invalid", FakeAuth())
+        client.connect()
+        return client
+
+    def test_a_connection_that_drops_before_the_greeting_is_closed(self):
+        self.assertRaises(ha_client.WebSocketClosed, self.connect)
+        self.assertTrue(FakeWebSocket.made[0].closed)
+
+    def test_so_is_one_that_drops_before_the_verdict(self):
+        self.assertRaises(ha_client.WebSocketClosed, self.connect,
+                          {"type": "auth_required"})
+        self.assertTrue(FakeWebSocket.made[0].closed)
+
+    def test_a_rejected_token_closes_the_connection_too(self):
+        self.assertRaises(ha_client.AuthFailed, self.connect,
+                          {"type": "auth_required"}, {"type": "auth_invalid"})
+        self.assertTrue(FakeWebSocket.made[0].closed)
+
+
 class Urls(unittest.TestCase):
     def test_the_websocket_url_follows_the_scheme(self):
         self.assertEqual(ha_client.websocket_url("https://ha.invalid"),

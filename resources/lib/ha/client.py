@@ -83,20 +83,21 @@ class HomeAssistant:
         websocket = WebSocket(self._url, timeout=15.0, verify_ssl=self._verify_ssl)
         websocket.connect()
 
-        greeting = websocket.recv_json()
-        if greeting.get("type") != "auth_required":
-            websocket.close()
-            raise HomeAssistantError("unexpected greeting: %s" % greeting.get("type"))
+        try:
+            greeting = websocket.recv_json()
+            if greeting.get("type") != "auth_required":
+                raise HomeAssistantError("unexpected greeting: %s" % greeting.get("type"))
 
-        websocket.send_json({"type": "auth", "access_token": token})
-        reply = websocket.recv_json()
-        if reply.get("type") == "auth_invalid":
+            websocket.send_json({"type": "auth", "access_token": token})
+            reply = websocket.recv_json()
+            if reply.get("type") == "auth_invalid":
+                self._auth.invalidate()
+                raise AuthFailed(reply.get("message", "authentication rejected"))
+            if reply.get("type") != "auth_ok":
+                raise HomeAssistantError("unexpected auth reply: %s" % reply.get("type"))
+        except Exception:
             websocket.close()
-            self._auth.invalidate()
-            raise AuthFailed(reply.get("message", "authentication rejected"))
-        if reply.get("type") != "auth_ok":
-            websocket.close()
-            raise HomeAssistantError("unexpected auth reply: %s" % reply.get("type"))
+            raise
 
         self.version = reply.get("ha_version", "")
         websocket.settimeout(_READ_TIMEOUT)
