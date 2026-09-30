@@ -280,10 +280,14 @@ class Dashboard(xbmcgui.WindowXML):
         self._note(rebuild=True, message="",
                    status="%s  -  %s" % (kodi.tr("connected"), client.version))
 
-    def _on_lost(self, error):
+    def _on_lost(self, error, final=False):
         self._store.on_states_changed = None
         self._store.on_structure_changed = None
-        self._note(status=kodi.tr("reconnecting"))
+        if final:
+            self._note(status=kodi.tr("disconnected"),
+                       message=kodi.tr("error_auth") % error)
+        else:
+            self._note(status=kodi.tr("reconnecting"))
 
     def _on_states_changed(self, entity_ids):
         self._note(entities=entity_ids)

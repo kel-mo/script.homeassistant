@@ -259,7 +259,8 @@ class Session:
     """Keeps a connection alive and rebuilds it after a drop.
 
     ``on_ready`` runs after every successful (re)connect and is where
-    subscriptions and the initial data load belong.
+    subscriptions and the initial data load belong. ``on_lost`` is told the
+    error, and whether the session has given up rather than trying again.
     """
 
     def __init__(self, base_url, authenticator, on_ready=None, on_lost=None,
@@ -314,6 +315,7 @@ class Session:
         while not self._stopped:
             client = None
             phase = "connect"
+            final = False
             try:
                 client = self._connect()
                 self._client = client
@@ -327,13 +329,11 @@ class Session:
                 self._keepalive(client)
             except ha_auth.AbortedError:
                 self.last_error = "cancelled"
-                on_lost = self._on_lost
-                if on_lost:
-                    on_lost(self.last_error)
-                return
+                final = True
             except Exception as error:
                 self.last_error = str(error)
                 self._log("session error while %s: %s" % (phase, error), 3)
+                final = self._refused(error)
             finally:
                 # Without this a connection whose load failed would stay open,
                 # reader thread and all, and every retry would add another.
@@ -343,14 +343,26 @@ class Session:
             self._client = None
             on_lost = self._on_lost
             if on_lost and not self._stopped:
-                on_lost(self.last_error)
-            if self._stopped:
+                on_lost(self.last_error, final)
+            if self._stopped or final:
                 return
 
             delay = _RECONNECT_DELAYS[min(attempt, len(_RECONNECT_DELAYS) - 1)]
             attempt += 1
             self._wake.wait(delay)
             self._wake.clear()
+
+    def _refused(self, error):
+        """Whether trying again would only be turned away again.
+
+        A long-lived token is sent as it is every time, so its rejection
+        stands; a token the login handed out is renewed on the next attempt.
+        A server that could not be asked has refused nothing.
+        """
+        if isinstance(error, AuthFailed):
+            return self._auth.uses_long_lived_token
+        return (isinstance(error, ha_auth.AuthError)
+                and not isinstance(error, ha_auth.TransportError))
 
     def _connect(self):
         """Open a connection, giving a refused handshake a few quick tries."""

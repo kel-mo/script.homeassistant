@@ -3,6 +3,7 @@
 import unittest
 
 from . import support  # noqa: F401  (puts the addon on the path)
+from resources.lib.ha import auth as ha_auth
 from resources.lib.ha import client as ha_client
 
 
@@ -154,6 +155,67 @@ class ClosingMidCommand(unittest.TestCase):
     def test_so_does_a_subscription(self):
         self.assertRaises(ha_client.NotConnected, self.client().subscribe,
                           lambda event: None)
+
+
+class RefusingClient(FakeClient):
+    """Stands in for HomeAssistant: every connect fails with the same error."""
+
+    def connect(self):
+        raise RefusingClient.error
+
+
+class LongLived:
+    def __init__(self, long_lived):
+        self.uses_long_lived_token = long_lived
+
+
+class GivingUp(unittest.TestCase):
+    """A refusal that trying again would only repeat ends the session."""
+
+    def setUp(self):
+        FakeClient.made = []
+        self.original = ha_client.HomeAssistant
+        self.pause = ha_client._CONNECT_PAUSE
+        ha_client.HomeAssistant = RefusingClient
+        ha_client._CONNECT_PAUSE = 0
+
+    def tearDown(self):
+        ha_client.HomeAssistant = self.original
+        ha_client._CONNECT_PAUSE = self.pause
+
+    def losses(self, error, long_lived=True):
+        RefusingClient.error = error
+        lost = []
+
+        def on_lost(message, final=False):
+            lost.append(final)
+            session._stopped = True  # one round is all a test needs
+
+        session = ha_client.Session("http://ha.invalid", LongLived(long_lived),
+                                    on_lost=on_lost)
+        session._run()
+        return lost
+
+    def test_a_rejected_long_lived_token_is_final(self):
+        self.assertEqual(self.losses(ha_client.AuthFailed("token rejected")), [True])
+
+    def test_a_refused_login_is_final(self):
+        self.assertEqual(self.losses(ha_auth.AuthError("400: invalid_auth"),
+                                     long_lived=False), [True])
+
+    def test_a_cancelled_login_is_final(self):
+        self.assertEqual(self.losses(ha_auth.AbortedError("login cancelled"),
+                                     long_lived=False), [True])
+
+    def test_a_login_token_is_renewed_rather_than_given_up_on(self):
+        self.assertEqual(self.losses(ha_client.AuthFailed("token rejected"),
+                                     long_lived=False), [False])
+
+    def test_an_unreachable_server_is_tried_again(self):
+        self.assertEqual(self.losses(ha_auth.TransportError("Connection refused"),
+                                     long_lived=False), [False])
+        self.assertEqual(self.losses(ha_client.HomeAssistantError("handshake"),
+                                     long_lived=False), [False])
 
 
 class Urls(unittest.TestCase):
