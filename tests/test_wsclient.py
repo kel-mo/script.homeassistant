@@ -107,6 +107,26 @@ class Writing(unittest.TestCase):
         self.assertRaises(wsclient.WebSocketClosed, websocket.send, "hello")
 
 
+class Handshake(unittest.TestCase):
+    def host_header(self, host, port, secure):
+        websocket = wsclient.WebSocket("ws://unused.invalid/")
+        websocket._sock = FakeSocket(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+        with self.assertRaises(wsclient.WebSocketError):
+            websocket._handshake(host, port, "/api/websocket", secure)
+        return [line for line in websocket._sock.sent.decode("ascii").split("\r\n")
+                if line.startswith("Host: ")]
+
+    def test_a_name_goes_out_as_it_is(self):
+        self.assertEqual(self.host_header("ha.invalid", 443, True), ["Host: ha.invalid"])
+        self.assertEqual(self.host_header("ha.invalid", 8123, False),
+                         ["Host: ha.invalid:8123"])
+
+    def test_an_ipv6_address_is_put_in_brackets(self):
+        self.assertEqual(self.host_header("fd00::1", 8123, False),
+                         ["Host: [fd00::1]:8123"])
+        self.assertEqual(self.host_header("fd00::1", 443, True), ["Host: [fd00::1]"])
+
+
 def _unmask(frame):
     """Strips a client frame back down to its payload."""
     length = frame[1] & 0x7F

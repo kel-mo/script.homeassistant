@@ -218,6 +218,9 @@ class WebSocket:
     def _handshake(self, host, port, path, secure):
         key = base64.b64encode(os.urandom(16)).decode("ascii")
         default_port = 443 if secure else 80
+        # An IPv6 literal goes back into the brackets urlparse took it out of.
+        if ":" in host:
+            host = "[%s]" % host
         host_header = host if port == default_port else "%s:%d" % (host, port)
         request = (
             "GET %s HTTP/1.1\r\n"
