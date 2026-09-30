@@ -38,6 +38,10 @@ class AbortedError(AuthError):
     """The user cancelled an interactive login step."""
 
 
+class TransportError(AuthError):
+    """Home Assistant could not be asked, which says nothing about the credentials."""
+
+
 def _request(url, data=None, headers=None, form=False, timeout=15, verify_ssl=True):
     body = None
     request_headers = dict(headers or {})
@@ -66,9 +70,11 @@ def _request(url, data=None, headers=None, form=False, timeout=15, verify_ssl=Tr
         except ValueError:
             detail = {}
         message = detail.get("error_description") or detail.get("message") or payload
-        raise AuthError("%s: %s" % (error.code, message.strip()[:200]))
+        # A proxy answers 5xx for a Home Assistant that is not up yet.
+        failure = TransportError if error.code >= 500 else AuthError
+        raise failure("%s: %s" % (error.code, message.strip()[:200]))
     except urllib.error.URLError as error:
-        raise AuthError(str(error.reason))
+        raise TransportError(str(error.reason))
 
 
 class Authenticator:
@@ -98,6 +104,8 @@ class Authenticator:
         if self._refresh_token:
             try:
                 return self._refresh()
+            except TransportError:
+                raise
             except AuthError:
                 self._refresh_token = ""
         return self._login()
